@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum AvailabilityType {
+  RECURRING
+  EXCEPTION
+}
+
+model User {
+  id                 String                 @id @default(cuid())
+  name               String?
+  email              String?                @unique
+  image              String?
+  role               Role                   @default(STAFF)
+  desiredWeeklyHours Int                    @default(40)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  skills             UserSkill[]
+  certifications     LocationCertification[]
+  managerLocations   ManagerLocation[]
+  availabilities     Availability[]
+}
+
+model Location {
+  id               String                 @id @default(cuid())
+  name             String
+  timezone         String
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  certifications   LocationCertification[]
+  managerLocations ManagerLocation[]
+  availabilities   Availability[]
+}
+
+model Skill {
+  id        String      @id @default(cuid())
+  name      String      @unique
+  users     UserSkill[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model UserSkill {
+  userId  String
+  skillId String
+  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([userId, skillId])
+}
+
+model LocationCertification {
+  userId     String
+  locationId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+}
+
+model ManagerLocation {
+  userId     String
+  locationId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+}
+
+model Availability {
+  id            String            @id @default(cuid())
+  userId        String
+  locationId    String
+  type          AvailabilityType
+  dayOfWeek     Int?
+  startMinute   Int?
+  endMinute     Int?
+  startDateTime DateTime?
+  endDateTime   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
