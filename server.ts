@@ -1,6 +1,6 @@
 import { WebSocketServer } from "ws";
 
-const port = Number(process.env.WS_PORT ?? 3001);
+const port = Number(process.env.PORT ?? process.env.WS_PORT ?? 3001);
 
 const wss = new WebSocketServer({ port });
 
