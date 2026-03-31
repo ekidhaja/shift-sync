@@ -6,12 +6,12 @@ ShiftSync is a full‑stack scheduling platform for a multi‑location restauran
 
 ## Tech Stack
 
-- **Frontend/Backend**: Next.js (App Router) + TypeScript  
-- **Database**: Managed Postgres + Prisma  
-- **Auth**: NextAuth + Prisma Adapter  
-- **Realtime**: Standalone WebSocket server  
-- **Notifications**: In‑app (persisted, read/unread)  
-- **Deploy**: Railway  
+- **Frontend/Backend**: Next.js (App Router) + TypeScript
+- **Database**: Managed Postgres + Prisma
+- **Auth**: NextAuth + Prisma Adapter
+- **Realtime**: Standalone WebSocket server
+- **Notifications**: In‑app (persisted, read/unread)
+- **Deploy**: Railway
 
 ---
 
@@ -34,37 +34,51 @@ ShiftSync is a full‑stack scheduling platform for a multi‑location restauran
 
 These resolve the intentional ambiguities:
 
-1. **Decertification & History**  
-   - **Decision**: Keep historical assignments; prevent future assignments.  
+1. **Decertification & History**
+   - **Decision**: Keep historical assignments; prevent future assignments.
    - **Why**: Preserves audit integrity and payroll accuracy.
 
-2. **Desired Hours vs Availability**  
-   - **Decision**: Availability is hard constraint; desired hours are soft targets.  
+2. **Desired Hours vs Availability**
+   - **Decision**: Availability is hard constraint; desired hours are soft targets.
    - **Why**: Avoids blocking schedules while guiding fairness.
 
-3. **Consecutive Days Calculation**  
-   - **Decision**: Any shift counts as a day worked.  
+3. **Consecutive Days Calculation**
+   - **Decision**: Any shift counts as a day worked.
    - **Why**: Matches staff workload and preparation impact.
 
-4. **Swap Approved → Shift Edited**  
-   - **Decision**: Cancel swap, keep original assignment, notify all.  
+4. **Swap Approved → Shift Edited**
+   - **Decision**: Cancel swap, keep original assignment, notify all.
    - **Why**: Prevents mismatched expectations and ambiguity.
 
-5. **Timezone for Locations**  
-   - **Decision**: Single fixed IANA timezone per location.  
+5. **Timezone for Locations**
+   - **Decision**: Single fixed IANA timezone per location.
    - **Why**: Predictable DST handling and scheduling clarity.
 
-6. **Desired Hours Default**  
-   - **Decision**: 40 hours/week if not specified.  
+6. **Desired Hours Default**
+   - **Decision**: 40 hours/week if not specified.
    - **Why**: Aligns with standard workforce planning.
 
-7. **Audit Retention & Export**  
-   - **Decision**: 365‑day retention; export per location (admins can select all).  
+7. **Audit Retention & Export**
+   - **Decision**: 365‑day retention; export per location (admins can select all).
    - **Why**: Keeps data manageable yet compliant and reviewable.
 
-8. **Manager Views**  
-   - **Decision**: Managers see **multi‑location** dashboards by default.  
+8. **Manager Views**
+   - **Decision**: Managers see **multi‑location** dashboards by default.
    - **Why**: Matches their operational scope.
+
+---
+
+## Calendar & Time Contract
+
+Timezone behavior is governed by `docs/TIMEZONE_LOCATION_CONTRACT.md`.
+
+Non-negotiable rules:
+
+- Location local time is the business truth.
+- Shifts are stored as UTC instants derived from the shift location timezone.
+- Users see shift times in the shift location timezone.
+- Recurring availability is local wall-clock and DST-stable per location.
+- Overnight shifts (for example `11:00 PM → 3:00 AM`) are handled as one shift.
 
 ---
 
@@ -93,6 +107,7 @@ These resolve the intentional ambiguities:
 ## Phase Checklist (Deployable Milestones)
 
 ### Phase 0 — Foundation & Deploy
+
 - Prisma schema, migrations, Railway Postgres
 - Base entities: User, Role, Location, Skill, Certification
 - Shared UI components library (`/components/*/index.tsx`)
@@ -101,35 +116,48 @@ These resolve the intentional ambiguities:
 - First Railway deploy
 
 ### Phase 1 — Auth & RBAC
+
 - NextAuth + Prisma adapter
 - Role gating + manager‑location scoping
-- Profile + availability CRUD
+- Profile self-service for all roles
+- Staff-only availability write access
+- Manager read-only availability timeline for managed locations
 - Seed users for Admin/Manager/Staff
 
 ### Phase 2 — Scheduling Core
+
 - Shift CRUD + assignment
 - Publish/unpublish with 48‑hour cutoff
 - Constraint engine + clear violations + alternatives
 - Audit logging for all changes
 
 ### Phase 3 — Swap & Coverage
+
 - Swap/drop requests + approval flow
 - Pending request cap (max 3)
 - Drop expiry 24 hours before shift
 - Cancel swap if shift is edited
 - Notifications for all steps
 
+Status: Implemented in current branch.
+
 ### Phase 4 — Compliance & Overtime
+
 - 35+ weekly warning, 40+ tracking
 - 8‑hour daily warning, 12‑hour block
 - 6th day warning, 7th day requires override
 - “What‑if” impact preview
 
+Status: Implemented in current branch.
+
 ### Phase 5 — Fairness & Realtime
+
 - Premium shift distribution
 - Desired hours variance + fairness score
 - Real‑time schedule updates, swap events, conflicts
 - Notification center + on‑duty live dashboard
+
+Status: Implemented in current branch.
 
 ---
 
@@ -170,6 +198,58 @@ Health check is available at `GET /api/health`.
 
 ---
 
+## QA Smoke Checks
+
+Run automated smoke checks after seeding and starting the app + websocket server:
+
+```bash
+npm run smoke:essential
+```
+
+- Verifies core RBAC/API flows across Admin, Manager, Staff
+- Covers audit export (including date range + manager scoping)
+- Covers regret swap cancellation and assignment integrity checks
+
+Expected terminal signal:
+
+```text
+=== Essential Endpoint Smoke Results ===
+...
+Summary: all checks passed (count may vary by setup path).
+```
+
+```bash
+npm run smoke:concurrency
+```
+
+- Simulates two managers assigning concurrently
+- Asserts first-write-wins with immediate conflict (`201` + `409`)
+
+Expected terminal signal:
+
+```text
+=== Concurrent Assignment Smoke Results ===
+...
+Summary: concurrent first-wins conflict behavior validated.
+```
+
+If a smoke run is not fully green, use this quick checklist:
+
+- Ensure both servers are running (`npm run dev` and `npm run dev:ws`)
+- Re-seed baseline data (`npm run db:push && npm run db:seed`)
+- Confirm local URL is `http://localhost:3000` (or set `SMOKE_BASE_URL`)
+- Re-run smoke commands from project root after reseed
+
+Run smoke checks against a deployed environment:
+
+```bash
+SMOKE_BASE_URL="https://your-deployed-app-url" npm run smoke:essential
+```
+
+---
+
 ## Notes
 
 This README reflects finalized decisions for the assessment and is intended to guide implementation, testing, and evaluation.
+
+Manual QA execution checklist is available at `docs/QA_CHECKLIST.md`.
