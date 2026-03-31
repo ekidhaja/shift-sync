@@ -1,4 +1,16 @@
 export { Badge } from "./badge";
 export { Button } from "./button";
 export { Card, CardContent, CardHeader } from "./card";
+export { DashboardNav } from "./dashboard-nav";
 export { Input } from "./input";
+export { InlineAlert } from "./inline-alert";
+export { AvailabilityForm } from "./availability-form";
+export { ManagerAvailabilityTimeline } from "./manager-availability-timeline";
+export { ProfileForm } from "./profile-form";
+export { ScheduleBoard } from "./schedule-board";
+export { StaffSchedule } from "./staff-schedule";
+export { SwapCenter } from "./swap-center";
+export { CompliancePanel } from "./compliance-panel";
+export { FairnessDashboard } from "./fairness-dashboard";
+export { NotificationCenter } from "./notification-center";
+export { RealtimeStatusIndicator } from "./realtime-status-indicator";

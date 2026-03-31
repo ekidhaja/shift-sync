@@ -18,38 +18,112 @@ enum AvailabilityType {
   EXCEPTION
 }
 
-model User {
-  id                 String                 @id @default(cuid())
-  name               String?
-  email              String?                @unique
-  image              String?
-  role               Role                   @default(STAFF)
-  desiredWeeklyHours Int                    @default(40)
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
+enum ShiftStatus {
+  DRAFT
+  PUBLISHED
+}
 
-  skills             UserSkill[]
-  certifications     LocationCertification[]
-  managerLocations   ManagerLocation[]
-  availabilities     Availability[]
+enum AuditEntityType {
+  SHIFT
+  SHIFT_ASSIGNMENT
+  SCHEDULE_WEEK
+  SWAP_REQUEST
+  NOTIFICATION
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ASSIGN
+  UNASSIGN
+  PUBLISH
+  UNPUBLISH
+  REQUEST_SWAP
+  ACCEPT_SWAP
+  APPROVE_SWAP
+  REJECT_SWAP
+  CANCEL_SWAP
+  READ_NOTIFICATION
+}
+
+enum SwapRequestType {
+  SWAP
+  DROP
+}
+
+enum SwapRequestStatus {
+  PENDING_PEER
+  PENDING_MANAGER
+  APPROVED
+  REJECTED
+  CANCELED
+  EXPIRED
+}
+
+enum NotificationType {
+  SWAP_REQUEST
+  SWAP_ACCEPTED
+  SWAP_APPROVED
+  SWAP_REJECTED
+  SWAP_CANCELED
+  DROP_REQUEST
+  COVERAGE_REQUEST
+  SCHEDULE_UPDATED
+  CONFLICT_ALERT
+  GENERAL
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  name               String?
+  email              String?   @unique
+  emailVerified      DateTime?
+  image              String?
+  role               Role      @default(STAFF)
+  desiredWeeklyHours Int       @default(40)
+  passwordHash       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  accounts               Account[]
+  sessions               Session[]
+  skills                 UserSkill[]
+  certifications         LocationCertification[]
+  managerLocations       ManagerLocation[]
+  availabilities         Availability[]
+  createdShifts          Shift[]                 @relation("ShiftCreator")
+  assignedShifts         ShiftAssignment[]       @relation("AssignedStaff")
+  shiftAssignmentsBy     ShiftAssignment[]       @relation("AssignmentActor")
+  swapRequests           SwapRequest[]           @relation("SwapRequester")
+  swapTargets            SwapRequest[]           @relation("SwapTarget")
+  swapManaged            SwapRequest[]           @relation("SwapManager")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  auditLogs              AuditLog[]
 }
 
 model Location {
-  id               String                 @id @default(cuid())
-  name             String
-  timezone         String
-  createdAt        DateTime               @default(now())
-  updatedAt        DateTime               @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   certifications   LocationCertification[]
   managerLocations ManagerLocation[]
   availabilities   Availability[]
+  shifts           Shift[]
+  notifications    Notification[]
+  scheduleWeeks    ScheduleWeek[]
+  auditLogs        AuditLog[]
 }
 
 model Skill {
   id        String      @id @default(cuid())
   name      String      @unique
   users     UserSkill[]
+  shifts    Shift[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }
@@ -57,8 +131,8 @@ model Skill {
 model UserSkill {
   userId  String
   skillId String
-  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([userId, skillId])
 }
@@ -82,7 +156,7 @@ model ManagerLocation {
 }
 
 model Availability {
-  id            String            @id @default(cuid())
+  id            String           @id @default(cuid())
   userId        String
   locationId    String
   type          AvailabilityType
@@ -91,9 +165,186 @@ model Availability {
   endMinute     Int?
   startDateTime DateTime?
   endDateTime   DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+}
+
+model ScheduleWeek {
+  id            String    @id @default(cuid())
+  locationId    String
+  weekStartDate DateTime
+  isPublished   Boolean   @default(false)
+  publishedAt   DateTime?
+  cutoffHours   Int       @default(48)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  shifts   Shift[]
+
+  @@unique([locationId, weekStartDate])
+}
+
+model Shift {
+  id              String      @id @default(cuid())
+  locationId      String
+  requiredSkillId String
+  scheduleWeekId  String
+  startDateTime   DateTime
+  endDateTime     DateTime
+  headcount       Int         @default(1)
+  status          ShiftStatus @default(DRAFT)
+  publishedAt     DateTime?
+  createdById     String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  location      Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  requiredSkill Skill             @relation(fields: [requiredSkillId], references: [id], onDelete: Restrict)
+  scheduleWeek  ScheduleWeek      @relation(fields: [scheduleWeekId], references: [id], onDelete: Cascade)
+  createdBy     User?             @relation("ShiftCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments   ShiftAssignment[]
+  swapRequests  SwapRequest[]     @relation("RequestedShift")
+  proposedSwaps SwapRequest[]     @relation("ProposedShift")
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model ShiftAssignment {
+  id           String   @id @default(cuid())
+  shiftId      String
+  userId       String
+  assignedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  shift      Shift      @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user       User       @relation("AssignedStaff", fields: [userId], references: [id], onDelete: Cascade)
+  assignedBy User?      @relation("AssignmentActor", fields: [assignedById], references: [id], onDelete: SetNull)
+  auditLogs  AuditLog[]
+
+  @@unique([shiftId, userId])
+}
+
+model AuditLog {
+  id                String          @id @default(cuid())
+  entityType        AuditEntityType
+  entityId          String
+  action            AuditAction
+  actorId           String?
+  locationId        String?
+  shiftId           String?
+  shiftAssignmentId String?
+  beforeState       Json?
+  afterState        Json?
+  createdAt         DateTime        @default(now())
+
+  actor           User?            @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  location        Location?        @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  shift           Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  shiftAssignment ShiftAssignment? @relation(fields: [shiftAssignmentId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([locationId, createdAt])
+}
+
+model SwapRequest {
+  id              String            @id @default(cuid())
+  type            SwapRequestType
+  status          SwapRequestStatus
+  requesterId     String
+  targetUserId    String?
+  managerId       String?
+  shiftId         String
+  proposedShiftId String?
+  reason          String?
+  overrideReason  String?
+  expiresAt       DateTime?
+  actedAt         DateTime?
+  canceledAt      DateTime?
+  cancelReason    String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  requester     User           @relation("SwapRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  targetUser    User?          @relation("SwapTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  manager       User?          @relation("SwapManager", fields: [managerId], references: [id], onDelete: SetNull)
+  shift         Shift          @relation("RequestedShift", fields: [shiftId], references: [id], onDelete: Cascade)
+  proposedShift Shift?         @relation("ProposedShift", fields: [proposedShiftId], references: [id], onDelete: SetNull)
+  notifications Notification[]
+
+  @@index([requesterId, status])
+  @@index([targetUserId, status])
+  @@index([shiftId, status])
+}
+
+model Notification {
+  id            String           @id @default(cuid())
+  userId        String
+  type          NotificationType
+  title         String
+  message       String
+  data          Json?
+  readAt        DateTime?
+  shiftId       String?
+  locationId    String?
+  swapRequestId String?
+  createdAt     DateTime         @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift       Shift?       @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  location    Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  swapRequest SwapRequest? @relation(fields: [swapRequestId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  userId          String   @id
+  inAppEnabled    Boolean  @default(true)
+  realtimeEnabled Boolean  @default(true)
+  emailEnabled    Boolean  @default(false)
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }

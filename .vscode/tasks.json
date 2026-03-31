@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "phase1-db-seed",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"db:push",
+				"&&",
+				"npm",
+				"run",
+				"db:seed"
+			],
+			"isBackground": false
+		}
+	]
+}
