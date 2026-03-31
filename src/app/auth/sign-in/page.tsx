@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
@@ -34,7 +34,7 @@ function mapAuthError(errorCode?: string | null) {
   return "Sign-in failed. Please try again.";
 }
 
-export default function SignInPage() {
+function SignInPageContent() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +42,11 @@ export default function SignInPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [hideQueryError, setHideQueryError] = useState(false);
 
-  const queryError = hideQueryError ? null : mapAuthError(searchParams.get("error"));
+  const queryErrorCode = searchParams.get("error");
+  const queryError = useMemo(
+    () => (hideQueryError ? null : mapAuthError(queryErrorCode)),
+    [hideQueryError, queryErrorCode]
+  );
   const errorMessage = submitError ?? queryError;
   const trimmedEmail = email.trim();
   const isSubmitDisabled =
@@ -158,5 +162,13 @@ export default function SignInPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInPageContent />
+    </Suspense>
   );
 }
